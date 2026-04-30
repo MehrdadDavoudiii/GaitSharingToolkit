@@ -4,7 +4,7 @@ A free, open-source toolkit for data management and decision-making in clinical 
 
 **Author**: Mehrdad Davoudi, University Children's Hospital Basel (UKBB), Basel, Switzerland
 
-📖 **[Documentation](https://mehrdaddavoudiii.github.io/GaitSharing/)** · 📄 **[Tutorial (PDF)](GaitSharing_Tutorial.pdf)**
+📖 **[Documentation](https://mehrdaddavoudiii.github.io/GaitSharing/)** · 📄 **[Tutorial (PDF)](https://github.com/MehrdadDavoudiii/GaitSharingToolkit/blob/main/Toturial/GaitSharing_Tutorial.pdf)**
 
 ---
 
