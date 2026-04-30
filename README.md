@@ -2,7 +2,7 @@
 
 A free, open-source toolkit for data management and decision-making in clinical gait analysis.
 
-**Author**: Mehrdad Davoudi — University Children's Hospital Basel (UKBB), Basel, Switzerland
+**Author**: Mehrdad Davoudi, University Children's Hospital Basel (UKBB), Basel, Switzerland
 
 📖 **[Documentation](https://mehrdaddavoudiii.github.io/GaitSharing/)** · 📄 **[Tutorial (PDF)](GaitSharing_Tutorial.pdf)**
 
