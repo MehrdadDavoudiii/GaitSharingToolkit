@@ -1,12 +1,6 @@
 Gait Sharing
 ============
 
-.. image:: _static/images/logo.png
-   :width: 200px
-   :align: center
-   :alt: Gait Sharing Logo
-
-|
 
 **Gait Sharing** is a free, open-source toolkit designed to facilitate data management and decision-making in clinical gait analysis.
 
