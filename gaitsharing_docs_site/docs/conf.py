@@ -37,7 +37,7 @@ html_theme_options = {
 html_context = {
     "display_github": True,
     "github_user": "MehrdadDavoudiii",
-    "github_repo": "GaitSharing",
+    "github_repo": "GaitSharingToolkit",
     "github_version": "main",
     "conf_py_path": "/docs/",
 }
