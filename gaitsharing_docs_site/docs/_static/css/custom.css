@@ -1,0 +1,48 @@
+/* Gait Sharing docs custom styles */
+
+.wy-side-nav-search {
+    background-color: #2D3436;
+}
+
+.wy-side-nav-search input[type="text"] {
+    border-color: #9CBE20;
+}
+
+.wy-nav-top {
+    background-color: #2D3436;
+}
+
+.wy-menu-vertical header,
+.wy-menu-vertical p.caption {
+    color: #9CBE20;
+}
+
+a {
+    color: #7A9A10;
+}
+
+a:hover {
+    color: #9CBE20;
+}
+
+.rst-content .note .admonition-title {
+    background-color: #9CBE20;
+}
+
+.rst-content .note {
+    background-color: #F8FAF0;
+}
+
+.rst-content img {
+    border: 1px solid #DFE6E9;
+    border-radius: 4px;
+    padding: 4px;
+}
+
+.rst-content img.author-photo {
+    border-radius: 50%;
+    border: 3px solid #9CBE20;
+    padding: 2px;
+    margin-right: 20px;
+    margin-bottom: 10px;
+}
