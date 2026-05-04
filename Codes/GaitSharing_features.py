@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import re
@@ -299,9 +298,6 @@ def _shorten_header(hdr: str) -> str:
 
 #  EXCEL WRITER
 
-#  EXCEL WRITER  —  only Clinical_Summary is written; per-type / combined
-#  feature sheets were removed in favour of a single averaged-per-side view.
-
 # Plane mapping: short letter → (clinical plane, motion description)
 _PLANE_MAP = {
     "X": ("Sagittal",    "Flex/Ext"),
@@ -348,18 +344,8 @@ def _expand_feature_name(key: str) -> dict:
     Parse a compact ML feature key into human-readable components.
 
     Input:  "RHipAngles_X__Whole__Max"
-    Output: {
-        "side": "Right",
-        "segment": "Hip Angles",
-        "plane": "Sagittal (Flex/Ext)",
-        "phase": "Whole Cycle",
-        "feature": "Maximum",
-        "short": "RHipAngles_X",
-        "human": "Right Hip Angles – Sagittal (Flex/Ext)",
-        "joint": "Hip",            # NEW: bare joint name for filtering
-        "plane_code": "X",         # NEW: X / Y / Z for filtering
-        "data_type": "Angles",     # NEW: Angles / Moments / Powers / Forces
-    }
+    Output: { side, segment, plane, phase, feature, short, human, joint,
+              plane_code, data_type }
     """
     parts = key.split("__")
     if len(parts) != 3:
@@ -369,11 +355,9 @@ def _expand_feature_name(key: str) -> dict:
 
     channel, phase, feat = parts
 
-    # Parse side
     side_code = channel[0] if channel and channel[0] in ("R", "L") else ""
     side = _SIDE_MAP.get(side_code, "")
 
-    # Parse segment + plane from "RHipAngles_X"
     rest = channel[1:] if side_code else channel
     if "_" in rest:
         seg_raw, plane_code = rest.rsplit("_", 1)
@@ -384,11 +368,9 @@ def _expand_feature_name(key: str) -> dict:
     plane_info = _PLANE_MAP.get(plane_code, (plane_code, ""))
     plane_str = f"{plane_info[0]} ({plane_info[1]})" if plane_info[1] else plane_info[0]
 
-    # Phase expansion
     phase_map = {"Whole": "Whole Cycle", "Stance": "Stance Phase", "Swing": "Swing Phase"}
     phase_human = phase_map.get(phase, phase)
 
-    # Feature expansion
     feat_map = {
         "Max": "Maximum", "Min": "Minimum", "Mean": "Mean",
         "Range": "Range", "Max@": "Max at (%GC)", "Min@": "Min at (%GC)",
@@ -399,7 +381,6 @@ def _expand_feature_name(key: str) -> dict:
     if plane_str:
         human += f" – {plane_str}"
 
-    # Bare joint name + data_type (extracted from segment short name)
     joint, data_type = _split_segment(seg_raw)
 
     return {
@@ -411,8 +392,6 @@ def _expand_feature_name(key: str) -> dict:
 
 # joint / data_type extraction & filtering
 
-# Trailing tokens we strip from the raw segment name to get the joint.
-# Order matters — longer first so "Moments" wins over "Moment".
 _TYPE_SUFFIXES = [
     ("Angles",  "Angles"),
     ("Angle",   "Angles"),
@@ -425,20 +404,7 @@ _TYPE_SUFFIXES = [
 ]
 
 def _split_segment(seg_raw: str) -> tuple[str, str]:
-    """
-    Strip a trailing data-type token from a raw segment name.
-
-    Examples:
-        "HipAngles"          → ("Hip", "Angles")
-        "KneeMoment"         → ("Knee", "Moments")
-        "AnklePower"         → ("Ankle", "Powers")
-        "FootProgressAngles" → ("FootProgress", "Angles")
-        "GroundReactionForce"→ ("GroundReaction", "Forces")
-        "PelvisAngles"       → ("Pelvis", "Angles")
-        "Foo"                → ("Foo", "")           # no recognised suffix
-
-    Used both for filtering and to display a clean "joint" column.
-    """
+    """Strip a trailing data-type token from a raw segment name."""
     if not seg_raw:
         return "", ""
     for suffix, dtype in _TYPE_SUFFIXES:
@@ -446,8 +412,6 @@ def _split_segment(seg_raw: str) -> tuple[str, str]:
             return seg_raw[: -len(suffix)], dtype
     return seg_raw, ""
 
-# Default joint list shown in the selection dialog. The user can add free-text
-# patterns for joints not in this list (e.g. "Calc" for calcaneus).
 _DEFAULT_JOINTS = [
     "Hip", "Knee", "Ankle",
     "Pelvis", "Spine", "Thorax", "Trunk",
@@ -512,6 +476,43 @@ class FilterSpec:
             bits.append(f"healthy={Path(self.healthy_path).name}")
         return "; ".join(bits) if bits else "all"
 
+# stride-key helpers (handle both "S1_R" single-trial keys and
+# "T1_S1_R" multi-trial keys produced by the averaged extractor)
+
+def _stride_key_side(stride_key: str) -> str | None:
+    """Return 'Right' / 'Left' / None from a stride key. Robust to T-prefix."""
+    if stride_key.endswith("_R"):
+        return "Right"
+    if stride_key.endswith("_L"):
+        return "Left"
+    return None
+
+def _stride_key_side_code(stride_key: str) -> str:
+    """Return 'R' / 'L' / '' from a stride key."""
+    if stride_key.endswith("_R"):
+        return "R"
+    if stride_key.endswith("_L"):
+        return "L"
+    return ""
+
+def _stride_sort_key(k: str) -> tuple:
+    """
+    Sort key for stride identifiers — handles both 'S1_R' and 'T1_S1_R'.
+    Sort order: trial idx (0 if absent), stride idx, side.
+    """
+    parts = k.split("_")
+    trial = 0
+    stride = 0
+    side_code = ""
+    for p in parts:
+        if p.startswith("T") and p[1:].isdigit():
+            trial = int(p[1:])
+        elif p.startswith("S") and p[1:].isdigit():
+            stride = int(p[1:])
+        elif p in ("R", "L"):
+            side_code = p
+    return (trial, stride, side_code)
+
 # stride-to-side averaging
 
 def _aggregate_per_side(per_stride: dict[str, dict],
@@ -531,9 +532,7 @@ def _aggregate_per_side(per_stride: dict[str, dict],
     n_strides: dict[str, int] = {"Right": 0, "Left": 0}
 
     for stride_key, feats in per_stride.items():
-        parts = stride_key.split("_")
-        side_code = parts[1] if len(parts) > 1 else ""
-        side = _SIDE_MAP.get(side_code)
+        side = _stride_key_side(stride_key)
         if side not in ("Right", "Left"):
             continue
         n_strides[side] += 1
@@ -567,7 +566,7 @@ def _count_per_feature(per_stride: dict[str, dict],
     """Count strides on a side that contributed a non-NaN value for a feature."""
     n = 0
     for stride_key, feats in per_stride.items():
-        if not stride_key.endswith(f"_{side_code}"):
+        if _stride_key_side_code(stride_key) != side_code:
             continue
         v = feats.get(feature_key)
         if v is None:
@@ -585,16 +584,11 @@ def _write_clinical_summary_sheet(wb,
                                    filter_spec: FilterSpec | None,
                                    source: str,
                                    healthy: dict | None = None,
+                                   title_prefix: str = "Clinical Feature Summary",
                                    ) -> tuple[int, dict[str, int]]:
     """
     Clinical_Summary: per-side averaged features with SD and optional
     healthy-reference comparison.
-
-    Layout:
-      Side | Joint | Plane | Phase | N strides
-      | Max | Max SD | Min | Min SD | Mean | Mean SD
-      | Range | Range SD | Max@%GC | Max@ SD | Min@%GC | Min@ SD
-      [+ Healthy Max | Min | Mean | Range | Max@%GC | Min@%GC]
     """
     averaged, sd_vals, n_strides = _aggregate_per_side(per_stride, filter_spec)
     has_h = bool(healthy)
@@ -614,7 +608,7 @@ def _write_clinical_summary_sheet(wb,
 
     sub = filter_spec.describe() if filter_spec is not None else "all"
     _section(ws, 1, 1, n_cols,
-             f"Clinical Feature Summary  —  averaged ± SD"
+             f"{title_prefix}  —  averaged ± SD"
              f"   [filter: {sub}]   [{source}]", color)
 
     for ci, h in enumerate(col_hdrs, 1):
@@ -629,8 +623,6 @@ def _write_clinical_summary_sheet(wb,
     ws.row_dimensions[2].height = 30
     ws.freeze_panes = "A3"
 
-    # Feature names in the order they appear as columns.
-    # Each tuple is (display-col-offset, feature_key_in_dict, is_timing).
     _FEAT_ORDER = [
         ("Maximum",       False),
         ("Minimum",       False),
@@ -648,7 +640,6 @@ def _write_clinical_summary_sheet(wb,
         if not feats_avg:
             continue
 
-        # Group features by (channel-human, phase) for this side
         groups:    dict[tuple[str, str], dict[str, float]] = {}
         sd_groups: dict[tuple[str, str], dict[str, float]] = {}
         meta: dict[str, dict] = {}
@@ -679,7 +670,6 @@ def _write_clinical_summary_sheet(wb,
                 _dat(ws, row, 4, phase_name, alt)
                 _dat(ws, row, 5, n, alt)
 
-                # Patient value + SD pairs (cols 6..17)
                 ci = 6
                 for fn, is_timing in _FEAT_ORDER:
                     v = fv.get(fn)
@@ -690,14 +680,12 @@ def _write_clinical_summary_sheet(wb,
                     else:
                         _dat(ws, row, ci, None, alt)
                     ci += 1
-                    # SD column
                     if s is not None and n > 1 and not np.isnan(s):
                         _dat(ws, row, ci, round(float(s), 4), alt, fmt)
                     else:
                         _dat(ws, row, ci, None, alt)
                     ci += 1
 
-                # Healthy columns (cols 18..23 when present)
                 if has_h:
                     hv = _healthy_lookup(healthy, side, ch, phase_name)
                     for hkey in ("Max", "Min", "Mean", "Range", "Max@", "Min@"):
@@ -720,13 +708,12 @@ def _write_clinical_summary_sheet(wb,
 def _write_stride_details(wb,
                           per_stride: dict[str, dict],
                           filter_spec: FilterSpec | None,
-                          source: str) -> int:
+                          source: str,
+                          title_prefix: str = "Stride Details",
+                          ) -> int:
     """
     Write a Stride_Details sheet: one row per (stride, channel, phase).
     Same filter as Clinical_Summary but NO averaging — raw per-stride values.
-
-    Columns: Stride | Side | Joint / Channel | Plane | Phase
-             | Max | Min | Mean | Range | Max @%GC | Min @%GC
     """
     ws = wb.create_sheet("Stride_Details")
     color = "1ABC9C"
@@ -738,13 +725,13 @@ def _write_stride_details(wb,
 
     sub = filter_spec.describe() if filter_spec is not None else "all"
     _section(ws, 1, 1, n_cols,
-             f"Stride Details  —  per-stride values (before averaging)"
+             f"{title_prefix}  —  per-stride values (before averaging)"
              f"   [filter: {sub}]   [{source}]", color)
 
     for ci, h in enumerate(col_hdrs, 1):
         _hdr(ws, 2, ci, h, color)
 
-    widths = [8, 8, 26, 22, 14, 10, 10, 10, 10, 9, 9]
+    widths = [10, 8, 26, 22, 14, 10, 10, 10, 10, 9, 9]
     for ci, w in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(ci)].width = w
     ws.row_dimensions[2].height = 30
@@ -755,18 +742,13 @@ def _write_stride_details(wb,
 
     row = 3
     n_written = 0
-    # Walk strides in order (S1_R, S1_L, S2_R, …)
-    for stride_key in sorted(per_stride.keys(),
-                              key=lambda k: (int(k.split("_")[0][1:]),
-                                             k.split("_")[1])):
+    for stride_key in sorted(per_stride.keys(), key=_stride_sort_key):
         feats = per_stride[stride_key]
         if not feats:
             continue
-        parts = stride_key.split("_")
-        side_code = parts[1] if len(parts) > 1 else ""
+        side_code = _stride_key_side_code(stride_key)
         side = _SIDE_MAP.get(side_code, side_code)
 
-        # Group by (channel, phase)
         groups: dict[tuple[str, str], dict[str, float]] = {}
         meta: dict[str, dict] = {}
         for key, val in feats.items():
@@ -808,21 +790,32 @@ def _write_stride_details(wb,
 def _write_llm_text(output_path,
                      per_stride: dict[str, dict],
                      filter_spec: FilterSpec | None,
-                     stance_data: dict[str, list[float]]):
+                     stance_data: dict[str, list[float]],
+                     header_lines: list[str] | None = None):
     """
     Write a companion .txt file with averaged-per-side feature summary.
     Same filter as the Clinical_Summary sheet so both files agree.
+
+    ``header_lines`` allow callers (e.g. multi-trial averager) to add extra
+    context above the body — kept compatible with single-trial output.
     """
     txt_path = output_path.with_suffix(".txt")
     averaged, _sd, n_strides = _aggregate_per_side(per_stride, filter_spec)
 
     lines = []
     lines.append("=" * 70)
-    lines.append("GAIT FEATURE SUMMARY  —  averaged across strides per side")
+    if header_lines and header_lines[0]:
+        lines.append(header_lines[0])
+    else:
+        lines.append("GAIT FEATURE SUMMARY  —  averaged across strides per side")
     lines.append("=" * 70)
     lines.append(f"Source: {output_path.stem}")
     if filter_spec is not None:
         lines.append(f"Filter: {filter_spec.describe()}")
+    if header_lines and len(header_lines) > 1:
+        for hl in header_lines[1:]:
+            if hl:
+                lines.append(hl)
     lines.append("")
 
     for side, side_code in (("Right", "R"), ("Left", "L")):
@@ -830,7 +823,6 @@ def _write_llm_text(output_path,
         if not feats_avg:
             continue
 
-        # Mean stance % across the strides on this side
         stances = stance_data.get(side, [])
         if stances:
             stance_mean = float(np.mean(stances))
@@ -845,7 +837,6 @@ def _write_llm_text(output_path,
                      + stance_str)
         lines.append("-" * 70)
 
-        # Group features by channel-human / phase
         channels: dict[str, dict[str, dict[str, float]]] = {}
         for key, val in feats_avg.items():
             info = _expand_feature_name(key)
@@ -892,51 +883,40 @@ def _write_llm_text(output_path,
     txt_path.write_text("\n".join(lines), encoding="utf-8")
     return txt_path
 
-#  MAIN PUBLIC FUNCTION
+#  PER-STRIDE EXTRACTION HELPER
+#  Pulled out of extract_gait_features so it can be reused by the
+#  multi-trial averaged extractor.
 
-def extract_gait_features(
-    input_path:  str | Path,
-    output_path: str | Path,
-    filter_spec: FilterSpec | None = None,
+def _extract_per_stride_from_excel(
+    input_path: Path,
     status_cb=None,
-) -> dict:
+) -> tuple[dict[str, dict], dict[str, list[float]], list[str]]:
     """
-    Read a stride-analysis Excel and write a per-side, averaged
-    Clinical_Summary sheet plus a companion .txt for LLM consumption.
+    Read one stride-analysis .xlsx and compute the per-stride feature dict.
 
-    Output Excel contains a SINGLE sheet, "Clinical_Summary", with one
-    row per (side, joint/channel, phase). Values are averaged across
-    all strides of that side. The optional ``filter_spec`` restricts
-    which (side, joint, plane, data_type) combinations are written —
-    pass None to include everything.
-
-    Each row = (Side, Joint, Plane, Phase, N strides, Max, Min, Mean,
-                Range, Max@%GC, Min@%GC).
+    Returns:
+        per_stride:  {"S1_R": {feature_key: value, …}, "S2_R": {…}, …}
+        stance_data: {"Right": [60.1, 61.3, …], "Left": [...]}
+        stride_keys: ordered list of stride keys (e.g. ["S1_R", "S1_L", …])
     """
-    input_path  = Path(input_path)
-    output_path = Path(output_path)
-
     def upd(msg):
         if status_cb:
             status_cb(msg)
 
-    # 1. Load
     upd(f"Loading {input_path.name} …")
     wb_in = openpyxl.load_workbook(str(input_path), data_only=True,
                                     read_only=True)
 
-    # 2. Read stance % from Summary
     stance_data = _parse_summary(wb_in)
     upd(f"  Stance %: Right={stance_data['Right']}, Left={stance_data['Left']}")
 
-    # 3. Find all normalised sheets
     norm_sheets = []
     for name in wb_in.sheetnames:
         m = _NORM_PATTERN.match(name)
         if m:
             stride_num = int(m.group(1))
-            side_tag   = m.group(2)          # "R" or "L"
-            data_type  = m.group(3)          # "Angles", "Moments", etc.
+            side_tag   = m.group(2)
+            data_type  = m.group(3)
             side       = "Right" if side_tag == "R" else "Left"
             norm_sheets.append({
                 "name":       name,
@@ -953,7 +933,6 @@ def extract_gait_features(
         wb_in.close()
         raise ValueError("No normalised sheets found (S*_*_*_Norm).")
 
-    # 4. Extract features (per stride, all data types merged)
     stride_keys: list[str] = []
     seen_keys: set[str] = set()
     for ns in norm_sheets:
@@ -984,8 +963,32 @@ def extract_gait_features(
         per_stride[key].update(features)
 
     wb_in.close()
+    return per_stride, stance_data, stride_keys
 
-    # 5. Parse healthy reference (if provided)
+#  MAIN PUBLIC FUNCTION — single trial
+
+def extract_gait_features(
+    input_path:  str | Path,
+    output_path: str | Path,
+    filter_spec: FilterSpec | None = None,
+    status_cb=None,
+) -> dict:
+    """
+    Read one stride-analysis Excel and write a per-side averaged
+    Clinical_Summary sheet plus a companion .txt for LLM consumption.
+    """
+    input_path  = Path(input_path)
+    output_path = Path(output_path)
+
+    def upd(msg):
+        if status_cb:
+            status_cb(msg)
+
+    # 1. Read strides
+    per_stride, stance_data, stride_keys = _extract_per_stride_from_excel(
+        input_path, status_cb=status_cb)
+
+    # 2. Parse healthy reference (if provided)
     healthy = None
     if filter_spec is not None and filter_spec.healthy_path:
         upd(f"  Loading healthy reference: "
@@ -1000,7 +1003,7 @@ def extract_gait_features(
             upd(f"    parsed {n_h} channel entr"
                 f"{'y' if n_h == 1 else 'ies'} from healthy reference")
 
-    # 6. Write output
+    # 3. Write output
     upd(f"Writing Clinical_Summary  [filter: "
         f"{filter_spec.describe() if filter_spec else 'all'}] …")
     wb_out = openpyxl.Workbook()
@@ -1017,7 +1020,7 @@ def extract_gait_features(
     upd(f"Saving {output_path.name} …")
     wb_out.save(str(output_path))
 
-    # 7. LLM text summary (no healthy — patient only)
+    # 4. LLM text summary (no healthy — patient only)
     upd("Writing LLM text summary …")
     txt_path = _write_llm_text(output_path, per_stride,
                                 filter_spec, stance_data)
@@ -1039,6 +1042,177 @@ def extract_gait_features(
         "filter":         filter_spec.describe() if filter_spec else "all",
         "healthy_used":   healthy is not None,
     }
+
+#  MAIN PUBLIC FUNCTION — multi-trial average
+
+def extract_features_averaged(
+    input_paths: list[str | Path],
+    output_path: str | Path,
+    filter_spec: FilterSpec | None = None,
+    status_cb=None,
+) -> dict:
+    """
+    Pool strides from multiple stride-analysis Excel files and write a single
+    averaged Clinical_Summary sheet + companion .txt summarising the patient
+    across all input trials.
+
+    Strategy: every stride from every input file is treated as one big set,
+    averaged per side. This gives more strides per side and tighter SDs than
+    averaging trial-level means.
+    """
+    output_path = Path(output_path)
+
+    def upd(msg):
+        if status_cb:
+            status_cb(msg)
+
+    if not input_paths:
+        raise ValueError("extract_features_averaged: input_paths is empty")
+
+    # 1. Read each trial; merge per_stride dicts with T-prefixed keys
+    merged: dict[str, dict] = {}
+    merged_stance: dict[str, list[float]] = {"Right": [], "Left": []}
+    trial_summaries: list[str] = []
+
+    for trial_idx, raw in enumerate(input_paths, start=1):
+        p = Path(raw)
+        upd(f"\n── Trial {trial_idx}/{len(input_paths)}: {p.name} ──")
+        try:
+            per_stride, stance_data, stride_keys = \
+                _extract_per_stride_from_excel(p, status_cb=status_cb)
+        except Exception as exc:
+            upd(f"  ⚠  Skipping {p.name}: {exc}")
+            continue
+
+        # T-prefix keys so they stay unique across trials
+        nR = nL = 0
+        for k, v in per_stride.items():
+            new_key = f"T{trial_idx}_{k}"
+            merged[new_key] = v
+            sc = _stride_key_side_code(new_key)
+            if sc == "R": nR += 1
+            elif sc == "L": nL += 1
+
+        for side in ("Right", "Left"):
+            merged_stance[side].extend(stance_data.get(side, []))
+
+        trial_summaries.append(f"T{trial_idx}: {p.name} (R:{nR}, L:{nL})")
+
+    if not merged:
+        raise ValueError(
+            "No usable strides extracted from any of the input files.")
+
+    # 2. Optional healthy reference
+    healthy = None
+    if filter_spec is not None and filter_spec.healthy_path:
+        upd(f"\n  Loading healthy reference: "
+            f"{Path(filter_spec.healthy_path).name}")
+        healthy = _parse_healthy_txt(filter_spec.healthy_path)
+        if sum(len(c) for c in healthy.values()) == 0:
+            healthy = None
+            upd("  ⚠  Healthy file empty — proceeding without comparison.")
+
+    # 3. Write averaged Excel
+    n_trials = len(trial_summaries)
+    src_label = f"AVERAGE OF {n_trials} TRIAL(S)"
+    upd(f"\nWriting averaged Clinical_Summary  [filter: "
+        f"{filter_spec.describe() if filter_spec else 'all'}] …")
+    wb_out = openpyxl.Workbook()
+    wb_out.remove(wb_out.active)
+
+    n_rows, n_strides = _write_clinical_summary_sheet(
+        wb_out, merged, filter_spec, src_label, healthy=healthy,
+        title_prefix=f"Multi-Trial Clinical Feature Summary ({n_trials} trials)")
+
+    upd("Writing per-stride details (across all trials) …")
+    n_detail = _write_stride_details(
+        wb_out, merged, filter_spec, src_label,
+        title_prefix=f"Stride Details across {n_trials} trials")
+    upd(f"  → {n_detail} detail rows")
+
+    # Add a small "Trials" sheet listing what went in
+    ws_t = wb_out.create_sheet("Trials", 0)
+    ws_t.sheet_properties.tabColor = "8E44AD"
+    _section(ws_t, 1, 1, 3, f"Source trials  —  {n_trials} file(s) "
+             f"({n_strides['Right']} R / {n_strides['Left']} L strides total)",
+             "8E44AD")
+    _hdr(ws_t, 2, 1, "Trial", "8E44AD")
+    _hdr(ws_t, 2, 2, "File name", "8E44AD")
+    _hdr(ws_t, 2, 3, "Stride counts", "8E44AD")
+    ws_t.column_dimensions["A"].width = 8
+    ws_t.column_dimensions["B"].width = 60
+    ws_t.column_dimensions["C"].width = 22
+    for i, summary in enumerate(trial_summaries, start=3):
+        # summary is "T1: name.xlsx (R:n, L:n)"
+        m = re.match(r"^(T\d+):\s+(.*?)\s+\((R:\d+,\s*L:\d+)\)\s*$", summary)
+        if m:
+            t, name, counts = m.group(1), m.group(2), m.group(3)
+        else:
+            t, name, counts = "", summary, ""
+        alt = (i % 2 == 0)
+        _dat(ws_t, i, 1, t, alt)
+        _dat(ws_t, i, 2, name, alt)
+        _dat(ws_t, i, 3, counts, alt)
+
+    upd(f"Saving {output_path.name} …")
+    wb_out.save(str(output_path))
+
+    # 4. LLM text — multi-trial flavour
+    upd("Writing multi-trial LLM text summary …")
+    header_lines = [
+        f"GAIT FEATURE SUMMARY  —  POOLED ACROSS {n_trials} TRIAL(S)",
+        f"Trials pooled:",
+    ]
+    for s in trial_summaries:
+        header_lines.append(f"  • {s}")
+    txt_path = _write_llm_text(output_path, merged,
+                                filter_spec, merged_stance,
+                                header_lines=header_lines)
+    upd(f"  → {txt_path.name}")
+
+    upd(f"✓ Multi-trial average done — {n_rows} summary rows + "
+        f"{n_detail} detail rows  "
+        f"(Right: {n_strides['Right']} strides, "
+        f"Left: {n_strides['Left']} strides, "
+        f"from {n_trials} trial(s)"
+        + (f", with healthy reference" if healthy else "")
+        + ")")
+
+    return {
+        "n_trials":       n_trials,
+        "n_rows":         n_rows,
+        "n_detail_rows":  n_detail,
+        "n_strides_R":    n_strides["Right"],
+        "n_strides_L":    n_strides["Left"],
+        "trials":         trial_summaries,
+        "txt_path":       str(txt_path),
+        "filter":         filter_spec.describe() if filter_spec else "all",
+        "healthy_used":   healthy is not None,
+    }
+
+# Helper to derive a sensible name for the multi-trial output
+def _suggest_average_stem(input_paths: list[Path]) -> str:
+    """
+    Build an output stem for the multi-trial average file.
+    Uses the longest common prefix of input stems if non-trivial,
+    otherwise the parent folder name, otherwise a generic fallback.
+    """
+    stems = [Path(p).stem for p in input_paths]
+    if not stems:
+        return "MULTI_TRIAL_AVERAGE_features"
+    common = stems[0]
+    for s in stems[1:]:
+        i = 0
+        while i < len(common) and i < len(s) and common[i] == s[i]:
+            i += 1
+        common = common[:i]
+    common = common.rstrip(" _-.")
+    if len(common) >= 3:
+        return f"{common}_AVERAGE_features"
+    parent = Path(input_paths[0]).parent.name
+    if parent:
+        return f"{parent}_AVERAGE_features"
+    return "MULTI_TRIAL_AVERAGE_features"
 
 #  PySide6 WORKER + TAB
 
@@ -1062,17 +1236,18 @@ if _HAS_PYSIDE:
     # Filter selection dialog
     class FilterSelectionDialog(QDialog):
         """
-        Pop-up for selecting features + optional healthy reference comparison.
-        Healthy file path persisted via QSettings.
+        Pop-up for selecting features + optional healthy reference comparison
+        + multi-trial average toggle. Persisted via QSettings.
         """
         _SETTINGS_ORG = "GaitSharing"
         _SETTINGS_APP = "FeatureExtractor"
 
-        def __init__(self, parent=None):
+        def __init__(self, parent=None, multi_trial: bool = False):
             super().__init__(parent)
+            self._multi_trial = multi_trial
             self.setWindowTitle("Select Features to Include")
             self.setModal(True)
-            self.resize(680, 640)
+            self.resize(680, 700)
             self._build()
             self._load_settings()
 
@@ -1089,7 +1264,6 @@ if _HAS_PYSIDE:
                 f"color: {PALETTE['text_muted']}; font-size: 12px;")
             layout.addWidget(intro)
 
-            # Two-column grid: Sides + Planes on the left, Joints on the right
             top = QHBoxLayout()
             layout.addLayout(top)
 
@@ -1136,11 +1310,10 @@ if _HAS_PYSIDE:
             left_col.addWidget(type_grp)
             left_col.addStretch(1)
 
-            # Joints (right column, two-column grid)
+            # Joints
             joint_grp = QGroupBox("Joint / Segment")
             joint_lay = QVBoxLayout(joint_grp)
 
-            # Quick-select buttons
             qs_row = QHBoxLayout()
             all_btn  = QPushButton("Select All")
             none_btn = QPushButton("Select None")
@@ -1162,21 +1335,17 @@ if _HAS_PYSIDE:
                 self._cb_joints[name] = cb
                 grid.addWidget(cb, i // cols, i % cols)
 
-            # Custom joint patterns
-            custom_lbl = QLabel(
-                "Custom")
+            custom_lbl = QLabel("Custom")
             custom_lbl.setStyleSheet(
                 f"color: {PALETTE['text_muted']}; font-size: 11px;")
             joint_lay.addSpacing(6)
             joint_lay.addWidget(custom_lbl)
             self._custom_edit = QLineEdit()
-            self._custom_edit.setPlaceholderText(
-                "e.g. Calc, MTP, ForeFoot")
+            self._custom_edit.setPlaceholderText("e.g. Calc, MTP, ForeFoot")
             joint_lay.addWidget(self._custom_edit)
 
             top.addWidget(joint_grp, stretch=2)
 
-            # Quick-select wiring
             def _set_all(checked: bool):
                 for cb in self._cb_joints.values():
                     cb.setChecked(checked)
@@ -1189,6 +1358,24 @@ if _HAS_PYSIDE:
             all_btn.clicked.connect(lambda: _set_all(True))
             none_btn.clicked.connect(lambda: _set_all(False))
             std_btn.clicked.connect(_lower_only)
+
+            # Multi-trial average (only meaningful with >1 input file)
+            avg_grp = QGroupBox("Multi-trial average")
+            avg_lay = QVBoxLayout(avg_grp)
+            self._cb_make_avg = QCheckBox(
+                "Also produce one combined average file across all input "
+                "trials (pools all strides)")
+            self._cb_make_avg.setChecked(self._multi_trial)
+            self._cb_make_avg.setEnabled(self._multi_trial)
+            avg_lay.addWidget(self._cb_make_avg)
+            if not self._multi_trial:
+                hint = QLabel(
+                    "  ↪  Enabled automatically when 2+ stride files are "
+                    "selected.")
+                hint.setStyleSheet(
+                    f"color: {PALETTE['text_muted']}; font-size: 11px;")
+                avg_lay.addWidget(hint)
+            layout.addWidget(avg_grp)
 
             # Healthy reference (optional, full-width)
             hr_grp = QGroupBox("Healthy Reference (optional)")
@@ -1216,7 +1403,6 @@ if _HAS_PYSIDE:
             _toggle_hr(False)
             layout.addWidget(hr_grp)
 
-            # OK / Cancel
             btns = QDialogButtonBox(
                 QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
             btns.accepted.connect(self._on_accept)
@@ -1291,6 +1477,9 @@ if _HAS_PYSIDE:
                               custom_joints=custom,
                               healthy_path=healthy)
 
+        def make_average(self) -> bool:
+            return self._cb_make_avg.isChecked() and self._cb_make_avg.isEnabled()
+
     # Worker
     class FeatureWorker(QThread):
         progress    = Signal(str, int)
@@ -1299,25 +1488,35 @@ if _HAS_PYSIDE:
         finished    = Signal(int, list)
 
         def __init__(self, files: list, out_dir,
-                     filter_spec: FilterSpec | None = None):
+                     filter_spec: FilterSpec | None = None,
+                     make_average: bool = False):
             super().__init__()
-            self.files       = files
-            self.out_dir     = out_dir
-            self.filter_spec = filter_spec
+            self.files        = files
+            self.out_dir      = out_dir
+            self.filter_spec  = filter_spec
+            self.make_average = make_average
 
         def run(self):
             total   = len(self.files)
             success = 0
             errors  = []
+            successful_paths: list[Path] = []
 
             if self.filter_spec is not None:
                 self.log_msg.emit(
                     f"Filter: {self.filter_spec.describe()}")
+            if self.make_average and total > 1:
+                self.log_msg.emit(
+                    f"Multi-trial average: ENABLED  "
+                    f"({total} input file(s) → 1 combined average)")
 
+            # ── Per-file pass ─────────────────────────────────────────────
             for i, xlsx_path in enumerate(self.files):
+                # Reserve last 15% for the averaged pass if needed
+                cap = 85 if (self.make_average and total > 1) else 100
                 self.progress.emit(
                     f"[{i+1}/{total}]  {xlsx_path.name}",
-                    int(100 * i / total))
+                    int(cap * i / total))
                 self.file_status.emit(str(xlsx_path), "Running…", "running")
 
                 out_path = self.out_dir / f"{xlsx_path.stem}_features.xlsx"
@@ -1333,6 +1532,7 @@ if _HAS_PYSIDE:
                         filter_spec=self.filter_spec,
                         status_cb=_cb)
                     success += 1
+                    successful_paths.append(xlsx_path)
                     n_rows = result["n_rows"]
                     nR = result["n_strides_R"]
                     nL = result["n_strides_L"]
@@ -1353,6 +1553,41 @@ if _HAS_PYSIDE:
                         str(xlsx_path), f"✗ {exc}", "err")
                     self.log_msg.emit(
                         f"  ✗  {xlsx_path.name}:  {exc}\n{tb}")
+
+            # ── Multi-trial average pass ──────────────────────────────────
+            if self.make_average and len(successful_paths) >= 2:
+                self.progress.emit("Building multi-trial average…", 88)
+                self.log_msg.emit(
+                    f"\n{'═'*50}\n"
+                    f"MULTI-TRIAL AVERAGE  ({len(successful_paths)} trials)\n"
+                    f"{'═'*50}")
+                stem = _suggest_average_stem(successful_paths)
+                avg_path = self.out_dir / f"{stem}.xlsx"
+
+                def _cb(msg):
+                    self.log_msg.emit(f"    {msg}")
+
+                try:
+                    res = extract_features_averaged(
+                        successful_paths, avg_path,
+                        filter_spec=self.filter_spec,
+                        status_cb=_cb)
+                    self.log_msg.emit(
+                        f"  ✓  Average Excel  →  {avg_path.name}")
+                    txt = res.get("txt_path", "")
+                    if txt:
+                        self.log_msg.emit(
+                            f"  ✓  Average LLM text  →  {Path(txt).name}")
+                except Exception as exc:
+                    import traceback
+                    tb = traceback.format_exc()
+                    errors.append(("[multi-trial average]", str(exc)))
+                    self.log_msg.emit(
+                        f"  ✗  Multi-trial average failed:  {exc}\n{tb}")
+            elif self.make_average and len(successful_paths) < 2:
+                self.log_msg.emit(
+                    "  ⚠  Multi-trial average skipped — "
+                    "need at least 2 successful files.")
 
             self.finished.emit(success, errors)
 
@@ -1383,7 +1618,6 @@ if _HAS_PYSIDE:
             clay.setContentsMargins(16, 12, 16, 12)
             clay.setSpacing(10)
 
-            # File list
             file_group = QGroupBox(
                 "Input Stride Files (from Stride Analysis)")
             fglay = QVBoxLayout(file_group)
@@ -1425,9 +1659,9 @@ if _HAS_PYSIDE:
             fglay.addWidget(self._file_count_lbl)
             clay.addWidget(file_group)
 
-            # Output folder
             out_group = QGroupBox(
-                "Output Folder (one _features.xlsx + .txt per input file)")
+                "Output Folder (one _features.xlsx + .txt per input file"
+                "; plus one combined average when 2+ files are loaded)")
             oglay = QHBoxLayout(out_group)
             self._out_lbl = QLabel("No folder selected.")
             self._out_lbl.setStyleSheet(
@@ -1438,25 +1672,25 @@ if _HAS_PYSIDE:
             oglay.addWidget(brw_btn)
             clay.addWidget(out_group)
 
-            # Info label
             info = QLabel(
                 "ℹ  Reads normalised sheets from stride analysis output.\n"
                 "     A pop-up will let you select sides / joints / planes / "
                 "variable types.\n"
-                "     Outputs a single Clinical_Summary sheet (averaged "
-                "across strides per side) + a companion .txt for AI.")
+                "     Per-file output: one Clinical_Summary sheet + companion "
+                ".txt for AI.\n"
+                "     With 2+ input files: also produces a single "
+                "*_AVERAGE_features.xlsx + .txt that pools all strides "
+                "across trials.")
             info.setWordWrap(True)
             info.setStyleSheet(
                 f"color: {PALETTE['text_muted']}; font-size: 12px; "
                 f"padding: 4px 0;")
             clay.addWidget(info)
 
-            # Run button
             self._run_btn = make_accent_btn("▶   Extract Features")
             self._run_btn.clicked.connect(self._run)
             clay.addWidget(self._run_btn, alignment=Qt.AlignLeft)
 
-            # Progress
             prog_group = QGroupBox("Progress")
             pglay = QVBoxLayout(prog_group)
             self._status_lbl = QLabel("Ready.")
@@ -1466,7 +1700,6 @@ if _HAS_PYSIDE:
             pglay.addWidget(self._pbar)
             clay.addWidget(prog_group)
 
-            # Log
             log_group = QGroupBox("Log")
             lglay = QVBoxLayout(log_group)
             self._log_widget = make_console_log()
@@ -1474,14 +1707,11 @@ if _HAS_PYSIDE:
             lglay.addWidget(self._log_widget)
             clay.addWidget(log_group, stretch=1)
 
-            # Wrap in scroll area for small screens (14")
             scroll = QScrollArea()
             scroll.setWidgetResizable(True)
             scroll.setWidget(content)
             scroll.setStyleSheet("QScrollArea { border: none; }")
             layout.addWidget(scroll)
-
-        # Helpers
 
         def _log(self, msg: str):
             self._log_widget.append(msg)
@@ -1499,6 +1729,8 @@ if _HAS_PYSIDE:
             n = len(self._files)
             self._file_count_lbl.setText(
                 f"{n} file{'s' if n != 1 else ''} selected."
+                + (f"   →  +1 combined average will be produced."
+                   if n >= 2 else "")
                 if n else "No files selected.")
 
         def _set_file_status(self, path_str, text, status_type):
@@ -1563,18 +1795,21 @@ if _HAS_PYSIDE:
                     "Select an output folder.")
                 return
 
-            # Pop up the filter dialog. Cancel aborts the run.
-            dlg = FilterSelectionDialog(self)
+            multi = len(self._files) >= 2
+            dlg = FilterSelectionDialog(self, multi_trial=multi)
             if dlg.exec() != QDialog.Accepted:
                 self._log("  (filter dialog cancelled — run aborted)")
                 return
             spec = dlg.filter_spec()
+            make_avg = dlg.make_average()
 
             self._run_btn.setEnabled(False)
             self._pbar.setValue(0)
 
             self._worker = FeatureWorker(
-                self._files[:], self._out_dir, filter_spec=spec)
+                self._files[:], self._out_dir,
+                filter_spec=spec,
+                make_average=make_avg)
             self._worker.progress.connect(
                 lambda msg, pct: (
                     self._status_lbl.setText(msg),
@@ -1608,11 +1843,30 @@ if _HAS_PYSIDE:
 
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) < 2:
-        print("Usage: python GaitSharing_features.py <strides.xlsx> [output.xlsx]")
+    args = sys.argv[1:]
+    if not args:
+        print("Usage:")
+        print("  Single trial:")
+        print("    python GaitSharing_features.py <strides.xlsx> [output.xlsx]")
+        print("  Multi-trial average (2+ inputs, last arg = output):")
+        print("    python GaitSharing_features.py <s1.xlsx> <s2.xlsx> ... "
+              "<output_average.xlsx>")
         sys.exit(1)
-    inp = Path(sys.argv[1])
-    out = Path(sys.argv[2]) if len(sys.argv) > 2 else inp.with_name(
-        f"{inp.stem}_features{inp.suffix}")
-    result = extract_gait_features(inp, out, status_cb=print)
-    print(f"\nResult: {result}")
+
+    if len(args) == 1:
+        inp = Path(args[0])
+        out = inp.with_name(f"{inp.stem}_features{inp.suffix}")
+        result = extract_gait_features(inp, out, status_cb=print)
+        print(f"\nResult: {result}")
+    elif len(args) == 2:
+        inp = Path(args[0])
+        out = Path(args[1])
+        result = extract_gait_features(inp, out, status_cb=print)
+        print(f"\nResult: {result}")
+    else:
+        # 3+ args: treat last as output, the rest as inputs
+        inputs = [Path(a) for a in args[:-1]]
+        out    = Path(args[-1])
+        print(f"Multi-trial mode: {len(inputs)} input(s) → {out.name}")
+        result = extract_features_averaged(inputs, out, status_cb=print)
+        print(f"\nResult: {result}")
