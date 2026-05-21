@@ -276,6 +276,139 @@ OUTPUT FORMAT (markdown):
 """,
     },
 
+    "UKBB Study": {
+        "icon": "🔬",
+        "description": "UKBB retrospective study — kinematic-only deviation detection + surgical suggestions for affected side (CP, kinematics angles only)",
+        "prompt": """You are an expert pediatric orthopaedic surgeon and gait analyst
+specialising in cerebral palsy. You receive kinematic joint angles
+from a 3D gait analysis of a child with cerebral palsy.
+
+You have NO spatiotemporal data, NO kinetics, NO clinical examination
+data. Reason only from the kinematic angles in the uploaded file and
+the diagnosis below.
+
+HEALTHY REFERENCE DATA:
+The uploaded feature file contains the line "Healthy reference: included"
+or "Healthy reference: not available".
+- If included: each phase row is immediately followed by a [Healthy] line
+  with matched reference values. Use these for direct comparison. In the
+  Feature column cite both values (e.g. "Stance Mean = 20.7 deg;
+  Healthy = 10.2 deg").
+- If not available: reason qualitatively from published normative ranges
+  only. Do not invent or estimate reference numbers.
+
+DIAGNOSIS:
+{diagnosis_context}
+
+AFFECTED SIDE:
+The diagnosis above specifies the affected limb (e.g. "right side",
+"left side", or "bilateral"). Assess deviations and suggest procedures
+ONLY for the affected side stated in the diagnosis.
+If bilateral: assess the more affected side and state which side you
+are assessing in the first table row.
+
+\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+PHASE 1 \u2014 GAIT DEVIATION DETECTION
+\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+
+Assess each deviation for the AFFECTED SIDE ONLY from kinematic
+angles in the uploaded file.
+
+For each item respond with exactly one of:
+  YES            = kinematic data clearly supports this deviation
+  NO             = kinematic data does not support this deviation
+  NMI            = need more info (signal ambiguous or data missing)
+
+For YES:
+  Feature column: name the exact variable and value from the file
+  (e.g. "Right Knee Sagittal Stance Mean = 28 deg")
+
+For NMI:
+  Feature column: name exactly what data is missing or ambiguous
+
+For NO:
+  Feature column: leave blank
+
+Leave the Agreement column blank \u2014 filled by expert clinician.
+
+Output TABLE 1 as a markdown table. No text outside the table.
+
+| #  | Deviation | AI | Feature / Missing data | Agreement |
+|----|-----------|----|------------------------|-----------|
+| 1  | Increased anterior pelvic tilt                         | | | |
+| 2  | Reduced pelvic sagittal ROM                            | | | |
+| 3  | Pelvic obliquity in stance                             | | | |
+| 4  | Pelvic rotation asymmetry                              | | | |
+| 5  | Excessive pelvic rotation                              | | | |
+| 6  | Excessive hip flexion in stance                        | | | |
+| 7  | Reduced peak hip extension in stance                   | | | |
+| 8  | Reduced hip sagittal ROM                               | | | |
+| 9  | Excessive hip adduction in stance                      | | | |
+| 10 | Excessive hip adduction in swing                       | | | |
+| 11 | Excessive hip abduction in stance                      | | | |
+| 12 | Internal hip rotation in stance                        | | | |
+| 13 | External hip rotation in stance                        | | | |
+| 14 | Excessive knee flexion in stance                       | | | |
+| 15 | Knee hyperextension in stance                          | | | |
+| 16 | Reduced peak knee flexion in swing                     | | | |
+| 17 | Delayed timing of peak knee flexion in swing           | | | |
+| 18 | Reduced knee sagittal ROM                              | | | |
+| 19 | Internal knee rotation in stance                       | | | |
+| 20 | External knee rotation in stance                       | | | |
+| 21 | Reduced peak ankle dorsiflexion in stance              | | | |
+| 22 | Excessive peak ankle dorsiflexion in stance            | | | |
+| 23 | Excessive ankle plantarflexion in swing                | | | |
+| 24 | Reduced ankle sagittal ROM                             | | | |
+| 25 | Ankle valgus in stance                                 | | | |
+| 26 | Ankle varus in stance                                  | | | |
+| 27 | Foot internal rotation                                 | | | |
+| 28 | Foot external rotation                                 | | | |
+
+\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+PHASE 2 \u2014 SURGICAL PROCEDURE SUGGESTIONS
+\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+
+Base suggestions ONLY on deviations marked YES in TABLE 1 above.
+Do NOT use kinematic data directly in this phase.
+Do NOT suggest a procedure without a YES deviation to justify it.
+Suggest procedures for the AFFECTED SIDE ONLY.
+
+For each procedure respond with exactly one of:
+  YES  = one or more YES deviations from TABLE 1 justify this
+  NO   = no YES deviation supports this
+  NMI  = deviation suggests this but examination data needed to confirm
+
+For YES or NMI:
+  Driving deviations: list TABLE 1 item numbers that justify this
+  (e.g. "Dev 5, 6, 13")
+  Note: one sentence \u2014 what the deviation pattern implies
+
+For NO:
+  Leave the last two columns blank.
+
+Leave the Agreement column blank \u2014 filled by expert clinician.
+
+Output TABLE 2 as a markdown table. No text outside the table.
+
+| #  | Procedure group | AI | Driving deviations (Table 1 #) | Agreement |
+|----|-----------------|----|---------------------------------|-----------|
+| 1  | Calf muscle lengthening      | | | |
+| 2  | Tibialis anterior procedure  | | | |
+| 3  | Tibialis posterior procedure | | | |
+| 4  | Foot bony reconstruction     | | | |
+| 5  | Hamstring lengthening        | | | |
+| 6  | Rectus femoris transfer      | | | |
+| 7  | Distal knee surgery          | | | |
+| 8  | Derotation osteotomy         | | | |
+| 9  | Hip adductor lengthening     | | | |
+| 10 | Psoas procedure              | | | |
+| 11 | Proximal femoral osteotomy   | | | |
+| 12 | Selective dorsal rhizotomy   | | | |
+
+End of output.
+""",
+    },
+
     "Comparison Report": {
         "icon": "📊",
         "description": "Direct comparison: patient-vs-healthy, pre/post, or left/right — quantified deltas with causal reasoning",
@@ -2282,13 +2415,15 @@ class AIWorker(QThread):
     finished = Signal(bool, str)      # (success, message_or_path)
 
     def __init__(self, file_list: list[dict], header: dict,
-                 save_path: str, api_key: str, prompt: str = ""):
+                 save_path: str, api_key: str, prompt: str = "",
+                 prompt_name: str = ""):
         super().__init__()
-        self.file_list = file_list
-        self.header = header
-        self.save_path = save_path
-        self.api_key = api_key
-        self.prompt = prompt or CLINICAL_PROMPT
+        self.file_list   = file_list
+        self.header      = header
+        self.save_path   = save_path
+        self.api_key     = api_key
+        self.prompt      = prompt or CLINICAL_PROMPT
+        self.prompt_name = prompt_name   # detects UKBB Study mode
 
     def run(self):
         try:
@@ -2322,15 +2457,42 @@ class AIWorker(QThread):
                         },
                     })
 
-            self.progress.emit("Sending to AI (PHI excluded)…", 55)
-            response = client.chat.completions.create(
-                model="gpt-5",
-                messages=[{"role": "user", "content": content}],
-            )
-            interpretation = response.choices[0].message.content.strip()
+            # ── STUDY: pinned model + 3-run voting (UKBB Study prompt only) ─
+            _STUDY_MODEL  = "gpt-5.5-2026-04-23"  # change only this line to update
+            _IS_STUDY     = (self.prompt_name == "UKBB Study")
+            _N_RUNS       = 3 if _IS_STUDY else 1
+            _raw_outputs  = []
+
+            for _run_i in range(_N_RUNS):
+                if _IS_STUDY:
+                    self.progress.emit(
+                        f"Sending to AI (PHI excluded) — run {_run_i+1}/{_N_RUNS}…",
+                        50 + _run_i * 8)
+                else:
+                    self.progress.emit("Sending to AI (PHI excluded)…", 55)
+                _resp = client.chat.completions.create(
+                    model=_STUDY_MODEL,
+                    messages=[{"role": "user", "content": content}],
+                )
+                _raw_outputs.append(_resp.choices[0].message.content.strip())
+
+            _model_used   = _resp.model
+            _run_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            interpretation = _raw_outputs[0]   # run 1 shown in UI / docx
+
+            # ── STUDY: log model + timestamp ─────────────────────────────────
+            _log_path = Path(self.save_path) / "study_model_log.txt"
+            with open(_log_path, "a", encoding="utf-8") as _lf:
+                _lf.write(
+                    f"{_run_datetime} | Model: {_model_used} | "
+                    f"Patient: {self.header.get('patient_id','unknown')} | "
+                    f"Diagnosis: {self.header.get('diagnosis','')}\n"
+                )
+            # ─────────────────────────────────────────────────────────────────
+
             self.progress.emit("Interpretation received.", 80)
 
-            # Save report
+            # Save report (run 1 text)
             self.progress.emit("Saving report…", 90)
             header = self.header
             fname = (f"Report_{header.get('last_name','')}_"
@@ -2341,9 +2503,11 @@ class AIWorker(QThread):
                 doc.add_heading("Patient Report", level=0)
                 doc.add_paragraph(f"Patient ID:  {header.get('patient_id','')}")
                 doc.add_paragraph(f"Date:        {datetime.now().strftime('%Y-%m-%d')}")
+                doc.add_paragraph(f"Model:       {_model_used}")
+                doc.add_paragraph(f"Run time:    {_run_datetime}")
                 if header.get("diagnosis"):
                     doc.add_paragraph(f"Diagnosis context:  {header['diagnosis']}")
-                doc.add_heading("AI Clinical Interpretation", level=1)
+                doc.add_heading("AI Clinical Interpretation (Run 1 of 3)", level=1)
                 for line in interpretation.split("\n"):
                     if line.strip():
                         doc.add_paragraph(line.strip())
@@ -2355,10 +2519,220 @@ class AIWorker(QThread):
                     diag = header.get("diagnosis", "")
                     diag_line = f"Diagnosis context: {diag}\n\n" if diag else ""
                     fh.write(f"Patient ID: {header.get('patient_id','')}\n"
+                             f"Model:      {_model_used}\n"
+                             f"Run time:   {_run_datetime}\n"
                              f"{diag_line}"
                              f"{interpretation}")
 
             self.finished.emit(True, final_path)
+
+            # ── STUDY: export clean publication-ready xlsx ───────────────────
+            try:
+                import openpyxl
+                from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+                from collections import Counter
+
+                # ── helpers ──────────────────────────────────────────────────
+                def _thin():
+                    s = Side(style='thin', color='BBBBBB')
+                    return Border(left=s, right=s, top=s, bottom=s)
+
+                def _thick_bottom():
+                    th = Side(style='medium', color='888888')
+                    s  = Side(style='thin',   color='BBBBBB')
+                    return Border(left=s, right=s, top=s, bottom=th)
+
+                def _set(ws, row, col, val='', bold=False, italic=False,
+                         color='000000', bg='FFFFFF', align='left',
+                         size=10, wrap=True, border=True):
+                    c = ws.cell(row=row, column=col, value=val)
+                    c.font  = Font(name='Arial', size=size, bold=bold,
+                                   italic=italic, color=color)
+                    c.fill  = PatternFill('solid', fgColor=bg)
+                    c.alignment = Alignment(
+                        horizontal=align, vertical='center', wrap_text=wrap)
+                    if border:
+                        c.border = _thin()
+                    return c
+
+                def _parse_tables(text):
+                    """Parse all markdown tables from AI output."""
+                    tables, current, in_table = [], [], False
+                    for line in text.split('\n'):
+                        s = line.strip()
+                        if s.startswith('|') and '|' in s[1:]:
+                            if not in_table:
+                                in_table, current = True, []
+                            cells = [c.strip() for c in s.split('|') if c.strip()]
+                            if not all(set(c).issubset(set('-: ')) for c in cells):
+                                current.append(cells)
+                        else:
+                            if in_table and current:
+                                tables.append(current)
+                            in_table, current = False, []
+                    if in_table and current:
+                        tables.append(current)
+                    return tables
+
+                def _norm(v):
+                    """Normalise decision string to YES/NO/NMI/INC."""
+                    v = v.strip().upper()
+                    if v in ('YES',):              return 'YES'
+                    if v in ('NO',):               return 'NO'
+                    if v in ('NMI', 'NEED MORE INFO', 'NEED MORE INFORMATION'):
+                        return 'NMI'
+                    return v  # keep as-is if already INC or other
+
+                def _majority(decisions):
+                    """Return majority decision + formatted vote string."""
+                    norm = [_norm(d) for d in decisions]
+                    cnt  = Counter(norm)
+                    best = cnt.most_common(1)[0]
+                    if best[1] >= 2:          # 2 or 3 agree
+                        winner = best[0]
+                    else:                     # all three different
+                        winner = 'INC'
+                    vote_str = '  '.join(
+                        f"{k}:{v}/{_N_RUNS}" for k, v in cnt.most_common())
+                    return winner, vote_str
+
+                # ── parse all 3 runs ──────────────────────────────────────────
+                all_tables = [_parse_tables(o) for o in _raw_outputs]
+
+                # ── build merged table data ───────────────────────────────────
+                # merged_tables[ti] = list of rows where each row has:
+                #   [num, name, majority_decision, vote_str,
+                #    feature_run1, feature_run2, feature_run3, <extra cols...>]
+                merged_tables = []
+                for ti in range(2):
+                    run0 = all_tables[0][ti] if (
+                        len(all_tables[0]) > ti) else []
+                    n_rows = len(run0) - 1  # skip header
+                    merged = []
+                    for ri in range(n_rows):
+                        # collect decisions and features from each run
+                        decisions, features, extras = [], [], []
+                        for run_idx in range(_N_RUNS):
+                            t = (all_tables[run_idx][ti]
+                                 if len(all_tables[run_idx]) > ti else [])
+                            data_row = t[ri + 1] if len(t) > ri + 1 else []
+                            # col 0=#, 1=name, 2=decision, 3=feature, 4+=extra
+                            decisions.append(data_row[2] if len(data_row) > 2 else '')
+                            features.append(data_row[3] if len(data_row) > 3 else '')
+                            if run_idx == 0:
+                                extras = data_row[4:] if len(data_row) > 4 else []
+                        maj, vote_str = _majority(decisions)
+                        num  = run0[ri+1][0] if len(run0) > ri+1 else str(ri+1)
+                        name = run0[ri+1][1] if len(run0[ri+1]) > 1 else ''
+                        merged.append([num, name, maj, vote_str,
+                                       features[0]] + extras)
+                    merged_tables.append(merged)
+
+                # ── create workbook ───────────────────────────────────────────
+                wb = openpyxl.Workbook()
+
+                RATING_GUIDE = (
+                    "Agreement rating guide (filled by expert clinician)  —  "
+                    "2 = Appropriate: AI decision is clinically correct and "
+                    "kinematic evidence cited is valid  |  "
+                    "1 = Partially appropriate: correct decision but reasoning "
+                    "partially wrong, OR borderline clinical judgement  |  "
+                    "0 = Inappropriate: wrong decision, wrong evidence, or "
+                    "hallucinated feature"
+                )
+
+                sheet_defs = [
+                    # (sheet_name, col_headers, col_widths)
+                    ('Deviations', [
+                        '#', 'Deviation',
+                        'AI decision\n(majority 2/3)',
+                        'Votes\n(run breakdown)',
+                        'Feature / Missing data\n(from run 1)',
+                        'Agreement\n(0 / 1 / 2)',
+                        'Comment for disagreement'
+                    ], [5, 42, 14, 18, 44, 12, 36]),
+                    ('Procedures', [
+                        '#', 'Procedure group',
+                        'AI decision\n(majority 2/3)',
+                        'Votes\n(run breakdown)',
+                        'Driving deviations\n(Table 1 item #)',
+                        'Agreement\n(0 / 1 / 2)',
+                        'Comment for disagreement'
+                    ], [5, 32, 14, 18, 28, 12, 36]),
+                ]
+
+                for ti, (sname, col_hdrs, col_widths) in enumerate(sheet_defs):
+                    ws = wb.create_sheet(title=sname)
+                    n_cols = len(col_hdrs)
+                    last_col = openpyxl.utils.get_column_letter(n_cols)
+
+                    # ── ROW 1: meta info ─────────────────────────────────────
+                    ws.merge_cells(f'A1:{last_col}1')
+                    _set(ws, 1, 1,
+                         f"Patient: {header.get('patient_id','')}  |  "
+                         f"Diagnosis: {header.get('diagnosis','')}  |  "
+                         f"Model: {_model_used}  |  Run: {_run_datetime}",
+                         italic=True, color='444444', bg='F5F5F5', size=9)
+                    ws.row_dimensions[1].height = 14
+
+                    # ── ROW 2: rating guide ──────────────────────────────────
+                    ws.merge_cells(f'A2:{last_col}2')
+                    _set(ws, 2, 1, RATING_GUIDE,
+                         bold=True, color='1F4E79', bg='EBF3FB', size=9)
+                    ws.row_dimensions[2].height = 42
+
+                    # ── ROW 3: column headers ────────────────────────────────
+                    for ci, h in enumerate(col_hdrs, 1):
+                        _set(ws, 3, ci, h, bold=True,
+                             color='FFFFFF', bg='1F4E79',
+                             align='center', size=10)
+                    ws.row_dimensions[3].height = 32
+
+                    # ── ROWS 4+: data ────────────────────────────────────────
+                    merged = merged_tables[ti] if ti < len(merged_tables) else []
+                    for ri, row in enumerate(merged, 4):
+                        alt_bg = 'F9F9F9' if ri % 2 == 0 else 'FFFFFF'
+                        # col 1: number
+                        _set(ws, ri, 1, row[0] if len(row) > 0 else '',
+                             bold=True, align='center', bg=alt_bg)
+                        # col 2: name
+                        _set(ws, ri, 2, row[1] if len(row) > 1 else '',
+                             bg=alt_bg)
+                        # col 3: AI decision — bold, no colour
+                        decision = row[2] if len(row) > 2 else ''
+                        _set(ws, ri, 3, decision,
+                             bold=True, align='center', bg=alt_bg)
+                        # col 4: votes
+                        _set(ws, ri, 4, row[3] if len(row) > 3 else '',
+                             align='center', bg=alt_bg, color='444444', size=9)
+                        # col 5: feature / driving deviations
+                        _set(ws, ri, 5, row[4] if len(row) > 4 else '',
+                             bg=alt_bg, color='333333', size=9)
+                        # col 6: Agreement — empty, expert fills
+                        _set(ws, ri, 6, '', align='center', bg='FFFFFF')
+                        # col 7: Comment — empty, expert fills
+                        _set(ws, ri, 7, '', bg='FFFFFF')
+                        ws.row_dimensions[ri].height = 22
+
+                    # ── column widths ────────────────────────────────────────
+                    for ci, w in enumerate(col_widths, 1):
+                        ws.column_dimensions[
+                            openpyxl.utils.get_column_letter(ci)].width = w
+
+                    # freeze panes below header rows, after name col
+                    ws.freeze_panes = 'C4'
+
+                # Remove default empty sheet
+                if 'Sheet' in wb.sheetnames:
+                    del wb['Sheet']
+
+                xlsx_path = str(
+                    Path(self.save_path) / (fname + "_study_tables.xlsx"))
+                wb.save(xlsx_path)
+
+            except Exception as xlsx_err:
+                pass  # xlsx export is optional — never blocks main flow
+            # ─────────────────────────────────────────────────────────────────
         except Exception as e:
             self.finished.emit(False, str(e))
 
@@ -3106,7 +3480,8 @@ class AIInterpreterTab(QWidget):
 
         self._ai_worker = AIWorker(
             self.file_list[:], header, self.save_location,
-            api_key, final_prompt)
+            api_key, final_prompt,
+            prompt_name=self._active_prompt_name)
         self._ai_worker.progress.connect(
             lambda msg, pct: (
                 self.status_lbl.setText(msg), self.pbar.setValue(pct)))

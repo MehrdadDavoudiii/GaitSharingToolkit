@@ -791,16 +791,20 @@ def _write_llm_text(output_path,
                      per_stride: dict[str, dict],
                      filter_spec: FilterSpec | None,
                      stance_data: dict[str, list[float]],
-                     header_lines: list[str] | None = None):
+                     header_lines: list[str] | None = None,
+                     healthy: dict | None = None):
     """
     Write a companion .txt file with averaged-per-side feature summary.
     Same filter as the Clinical_Summary sheet so both files agree.
 
     ``header_lines`` allow callers (e.g. multi-trial averager) to add extra
     context above the body — kept compatible with single-trial output.
+    When ``healthy`` is provided each patient phase line is immediately
+    followed by a [Healthy] line with the matching reference values.
     """
     txt_path = output_path.with_suffix(".txt")
     averaged, _sd, n_strides = _aggregate_per_side(per_stride, filter_spec)
+    has_h = bool(healthy)
 
     lines = []
     lines.append("=" * 70)
@@ -809,9 +813,17 @@ def _write_llm_text(output_path,
     else:
         lines.append("GAIT FEATURE SUMMARY  —  averaged across strides per side")
     lines.append("=" * 70)
-    lines.append(f"Source: {output_path.stem}")
+    # ── Source and healthy-reference filenames are excluded (PHI / identifiers)
     if filter_spec is not None:
-        lines.append(f"Filter: {filter_spec.describe()}")
+        # Strip the healthy= part — it contains a filename
+        filter_desc = filter_spec.describe()
+        filter_clean = "; ".join(
+            part for part in filter_desc.split("; ")
+            if not part.startswith("healthy=")
+        )
+        if filter_clean:
+            lines.append(f"Filter: {filter_clean}")
+    lines.append(f"Healthy reference: {'included' if has_h else 'not available'}")
     if header_lines and len(header_lines) > 1:
         for hl in header_lines[1:]:
             if hl:
@@ -875,6 +887,36 @@ def _write_llm_text(output_path,
                     bits.append(f"Range={rng:.1f}")
                 if bits:
                     lines.append(f"    {phase_name:14s}  {', '.join(bits)}")
+
+                # ── Healthy reference line (immediately below patient line) ──
+                if has_h and bits:
+                    hv = _healthy_lookup(healthy, side, ch_name, phase_name)
+                    if hv:
+                        h_bits = []
+                        hmx    = hv.get("Max")
+                        hmx_at = hv.get("Max@")
+                        hmn    = hv.get("Min")
+                        hmn_at = hv.get("Min@")
+                        hmean  = hv.get("Mean")
+                        hrng   = hv.get("Range")
+                        if hmx is not None and not np.isnan(hmx):
+                            s = f"Max={hmx:.1f}"
+                            if hmx_at is not None and not np.isnan(hmx_at):
+                                s += f" at {hmx_at:.0f}%GC"
+                            h_bits.append(s)
+                        if hmn is not None and not np.isnan(hmn):
+                            s = f"Min={hmn:.1f}"
+                            if hmn_at is not None and not np.isnan(hmn_at):
+                                s += f" at {hmn_at:.0f}%GC"
+                            h_bits.append(s)
+                        if hmean is not None and not np.isnan(hmean):
+                            h_bits.append(f"Mean={hmean:.1f}")
+                        if hrng is not None and not np.isnan(hrng):
+                            h_bits.append(f"Range={hrng:.1f}")
+                        if h_bits:
+                            lines.append(
+                                f"    {'':14s}  [Healthy]  "
+                                f"{', '.join(h_bits)}")
 
     lines.append("\n" + "=" * 70)
     lines.append("END OF FEATURE SUMMARY")
@@ -1020,10 +1062,11 @@ def extract_gait_features(
     upd(f"Saving {output_path.name} …")
     wb_out.save(str(output_path))
 
-    # 4. LLM text summary (no healthy — patient only)
+    # 4. LLM text summary — includes healthy reference lines when available
     upd("Writing LLM text summary …")
     txt_path = _write_llm_text(output_path, per_stride,
-                                filter_spec, stance_data)
+                                filter_spec, stance_data,
+                                healthy=healthy)
     upd(f"  → {txt_path.name}")
 
     upd(f"✓ Done — {n_rows} summary rows + {n_detail} detail rows  "
@@ -1158,16 +1201,15 @@ def extract_features_averaged(
     wb_out.save(str(output_path))
 
     # 4. LLM text — multi-trial flavour
+    # Trial names and file names are excluded from the LLM text (PHI / identifiers)
     upd("Writing multi-trial LLM text summary …")
     header_lines = [
-        f"GAIT FEATURE SUMMARY  —  POOLED ACROSS {n_trials} TRIAL(S)",
-        f"Trials pooled:",
+        f"GAIT FEATURE SUMMARY  —  POOLED KINEMATIC DATA",
     ]
-    for s in trial_summaries:
-        header_lines.append(f"  • {s}")
     txt_path = _write_llm_text(output_path, merged,
                                 filter_spec, merged_stance,
-                                header_lines=header_lines)
+                                header_lines=header_lines,
+                                healthy=healthy)
     upd(f"  → {txt_path.name}")
 
     upd(f"✓ Multi-trial average done — {n_rows} summary rows + "
