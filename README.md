@@ -72,7 +72,7 @@ If you use Gait Sharing in your research, please cite:
 @software{davoudi2025gaitsharing,
   author    = {Davoudi, Mehrdad},
   title     = {Gait Sharing: A Toolkit for Clinical Gait Analysis},
-  year      = {2025},
+  year      = {2026},
   publisher = {GitHub},
   url       = {https://github.com/MehrdadDavoudiii/GaitSharing}
 }
