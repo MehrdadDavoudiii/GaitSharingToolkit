@@ -69,7 +69,7 @@ python GaitSharing_main.py
 If you use Gait Sharing in your research, please cite:
 
 ```bibtex
-@software{davoudi2025gaitsharing,
+@software{davoudi2026gaitsharing,
   author    = {Davoudi, Mehrdad},
   title     = {Gait Sharing: A Toolkit for Clinical Gait Analysis},
   year      = {2026},
